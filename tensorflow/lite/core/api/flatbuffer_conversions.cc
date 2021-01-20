@@ -622,21 +622,7 @@ TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
     }
 
     case BuiltinOperator_SQUEEZE: {
-      auto params = safe_allocator.Allocate<TfLiteSqueezeParams>();
-      TF_LITE_ENSURE(error_reporter, params != nullptr);
-      if (const auto* schema_params = op->builtin_options_as_SqueezeOptions()) {
-        const auto* squeeze_dims = schema_params->squeeze_dims();
-        if (squeeze_dims != nullptr) {
-          TF_LITE_ENSURE_STATUS(FlatBufferIntVectorToArray(
-              sizeof(params->squeeze_dims), squeeze_dims, params->squeeze_dims,
-              error_reporter, "squeeze"));
-          params->num_squeeze_dims = squeeze_dims->size();
-        } else {
-          params->num_squeeze_dims = 0;
-        }
-      }
-      *builtin_data = params.release();
-      return kTfLiteOk;
+      return ParseSqueeze(op, error_reporter, allocator, builtin_data);
     }
     case BuiltinOperator_SPARSE_TO_DENSE: {
       auto params = safe_allocator.Allocate<TfLiteSparseToDenseParams>();
@@ -1818,6 +1804,27 @@ TfLiteStatus ParseSplitV(const Operator* op, ErrorReporter* error_reporter,
   *builtin_data = params.release();
   return kTfLiteOk;
 }
+
+TfLiteStatus ParseSqueeze(const Operator* op, ErrorReporter* error_reporter,
+                           BuiltinDataAllocator* allocator,
+                           void** builtin_data) {
+  auto params = safe_allocator.Allocate<TfLiteSqueezeParams>();
+  TF_LITE_ENSURE(error_reporter, params != nullptr);
+  if (const auto* schema_params = op->builtin_options_as_SqueezeOptions()) {
+    const auto* squeeze_dims = schema_params->squeeze_dims();
+    if (squeeze_dims != nullptr) {
+      TF_LITE_ENSURE_STATUS(FlatBufferIntVectorToArray(
+          sizeof(params->squeeze_dims), squeeze_dims, params->squeeze_dims,
+          error_reporter, "squeeze"));
+      params->num_squeeze_dims = squeeze_dims->size();
+    } else {
+      params->num_squeeze_dims = 0;
+    }
+  }
+  *builtin_data = params.release();
+
+   return kTfLiteOk;
+ }
 
 // We have this parse function instead of directly returning kTfLiteOk from the
 // switch-case in ParseOpData because this function is used as part of the
