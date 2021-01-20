@@ -1808,9 +1808,17 @@ TfLiteStatus ParseSplitV(const Operator* op, ErrorReporter* error_reporter,
 TfLiteStatus ParseSqueeze(const Operator* op, ErrorReporter* error_reporter,
                            BuiltinDataAllocator* allocator,
                            void** builtin_data) {
-  auto params = safe_allocator.Allocate<TfLiteSqueezeParams>();
+  CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
+  SafeBuiltinDataAllocator safe_allocator(allocator);
+
+  std::unique_ptr<TfLiteSqueezeParams,
+                  SafeBuiltinDataAllocator::BuiltinDataDeleter>
+      params = safe_allocator.Allocate<TfLiteSqueezeParams>();
   TF_LITE_ENSURE(error_reporter, params != nullptr);
-  if (const auto* schema_params = op->builtin_options_as_SqueezeOptions()) {
+
+  const SqueezeOptions* schema_params = op->builtin_options_as_SqueezeOptions();
+
+  if (schema_params != nullptr) {
     const auto* squeeze_dims = schema_params->squeeze_dims();
     if (squeeze_dims != nullptr) {
       TF_LITE_ENSURE_STATUS(FlatBufferIntVectorToArray(
@@ -1820,11 +1828,15 @@ TfLiteStatus ParseSqueeze(const Operator* op, ErrorReporter* error_reporter,
     } else {
       params->num_squeeze_dims = 0;
     }
+  } else {
+    // TODO(b/157480169): We should either return kTfLiteError or fill in some
+    // reasonable defaults in the params struct. We are not doing so until we
+    // better undertand the ramifications of changing the legacy behavior.
   }
-  *builtin_data = params.release();
 
-   return kTfLiteOk;
- }
+  *builtin_data = params.release();
+  return kTfLiteOk;
+}
 
 // We have this parse function instead of directly returning kTfLiteOk from the
 // switch-case in ParseOpData because this function is used as part of the
