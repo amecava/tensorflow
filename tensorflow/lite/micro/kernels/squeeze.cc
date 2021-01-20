@@ -1,4 +1,4 @@
-/* Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +16,16 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/kernels/internal/portable_tensor.h"
-#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/internal/quantization_util.h"
+#include "tensorflow/lite/kernels/internal/reference/process_broadcast_shapes.h"
+#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/memory_helpers.h"
 
 namespace tflite {
-namespace ops {
-namespace builtin {
-namespace squeeze {
+namespace {
 
 struct SqueezeContext {
   SqueezeContext(TfLiteContext* context, TfLiteNode* node)
@@ -40,20 +42,20 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_EQ(context, NumOutputs(node), 1);
 
   SqueezeContext op_context(context, node);
-  int input_num_dims = NumDimensions(op_context.input);
-  int num_squeeze_dims = op_context.params->num_squeeze_dims;
+  const int input_num_dims = NumDimensions(op_context.input);
+  const int num_squeeze_dims = op_context.params->num_squeeze_dims;
 
-  // Determines number of dimensions of output tensor after squeeze.
   const TfLiteIntArray* input_dims = op_context.input->dims;
+  const TfLiteIntArray* output_dims = op_context.output->dims;
   const int* squeeze_dims = op_context.params->squeeze_dims;
+
   TF_LITE_ENSURE(context, input_num_dims <= 8);
   bool should_squeeze[8] = {false};
-  int num_squeezed_dims = 0;
+
   if (num_squeeze_dims == 0) {
     for (int idx = 0; idx < input_num_dims; ++idx) {
       if (input_dims->data[idx] == 1) {
         should_squeeze[idx] = true;
-        ++num_squeezed_dims;
       }
     }
   } else {
@@ -62,32 +64,28 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
                                           : squeeze_dims[idx];
       TF_LITE_ENSURE(context, current >= 0 && current < input_num_dims &&
                                   input_dims->data[current] == 1);
-      if (!should_squeeze[current]) ++num_squeezed_dims;
       should_squeeze[current] = true;
     }
   }
-  // Sets output dimensions.
-  TfLiteIntArray* output_dims =
-      TfLiteIntArrayCreate(input_num_dims - num_squeezed_dims);
+
+  // Checks output dimensions.
   for (int in_idx = 0, out_idx = 0; in_idx < input_num_dims; ++in_idx) {
     if (!should_squeeze[in_idx]) {
-      output_dims->data[out_idx++] = input_dims->data[in_idx];
+      TFLITE_CHECK_GE(output_dims->data[out_idx++], input_dims->data[in_idx]);
     }
   }
-  return context->ResizeTensor(context, op_context.output, output_dims);
+
+  return kTfLiteOk;
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   SqueezeContext op_context(context, node);
+
   if (op_context.input->type == kTfLiteString) {
-    const int input_flat_size = GetTensorShape(op_context.input).FlatSize();
-    const int output_flat_size = GetTensorShape(op_context.output).FlatSize();
-    TF_LITE_ENSURE_EQ(context, input_flat_size, output_flat_size);
-    SequentialTensorWriter<string> writer(op_context.input, op_context.output);
-    for (int i = 0; i < input_flat_size; i++) {
-      writer.Write(i);
-    }
-    return kTfLiteOk;
+    TF_LITE_KERNEL_LOG(context, "Type %s (%d) not supported.",
+                       TfLiteTypeGetName(op_context.input->type),
+                       op_context.input->type);
+    return kTfLiteError;
   }
 
   TF_LITE_ENSURE_EQ(context, op_context.input->bytes, op_context.output->bytes);
@@ -96,14 +94,17 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace squeeze
+}  // namespace
 
 TfLiteRegistration* Register_SQUEEZE() {
-  static TfLiteRegistration r = {nullptr, nullptr, squeeze::Prepare,
-                                 squeeze::Eval};
-  return &r;
+  return {/*init=*/nullptr,
+          /*free=*/nullptr,
+          /*prepare=*/Prepare,
+          /*invoke=*/Eval,
+          /*profiling_string=*/nullptr,
+          /*builtin_code=*/0,
+          /*custom_name=*/nullptr,
+          /*version=*/0};
 }
 
-}  // namespace builtin
-}  // namespace ops
 }  // namespace tflite
