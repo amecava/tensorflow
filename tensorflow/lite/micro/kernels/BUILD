@@ -133,6 +133,7 @@ cc_library(
         "shape.cc",
         "split.cc",
         "split_v.cc",
+        "squeeze.cc",
         "strided_slice.cc",
         "sub.cc",
         "svdf_common.cc",
