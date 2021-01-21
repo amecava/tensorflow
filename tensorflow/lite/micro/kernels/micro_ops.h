@@ -33,6 +33,7 @@ namespace tflite {
 
 TfLiteRegistration Register_CONV_2D();
 TfLiteRegistration Register_DEPTHWISE_CONV_2D();
+TfLiteRegistration Register_ONE_HOT();
 TfLiteRegistration Register_QUANTIZE();
 TfLiteRegistration Register_SHAPE();
 TfLiteRegistration Register_SOFTMAX();
@@ -75,7 +76,6 @@ TfLiteRegistration Register_MINIMUM();
 TfLiteRegistration Register_MUL();
 TfLiteRegistration Register_NEG();
 TfLiteRegistration Register_NOT_EQUAL();
-TfLiteRegistration Register_ONE_HOT();
 TfLiteRegistration Register_PACK();
 TfLiteRegistration Register_PAD();
 TfLiteRegistration Register_PADV2();

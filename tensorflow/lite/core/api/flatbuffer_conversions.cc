@@ -1433,8 +1433,8 @@ TfLiteStatus ParseNotEqual(const Operator*, ErrorReporter*,
   return kTfLiteOk;
 }
 
-TfLiteStatus ParseOneHot(const Operator*, ErrorReporter*,
-                         BuiltinDataAllocator*, void** builtin_data) {
+TfLiteStatus ParseOneHot(const Operator* op, ErrorReporter* error_reporter,
+                         BuiltinDataAllocator* allocator, void** builtin_data) {
   CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
   SafeBuiltinDataAllocator safe_allocator(allocator);
 
