@@ -131,6 +131,7 @@ cc_library(
         "resize_nearest_neighbor.cc",
         "round.cc",
         "shape.cc",
+        "space_to_batch_nd.cc",
         "split.cc",
         "split_v.cc",
         "squeeze.cc",
