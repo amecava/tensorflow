@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,25 +14,18 @@ limitations under the License.
 ==============================================================================*/
 #include <stdint.h>
 
+#include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/kernels/internal/compatibility.h"
-#include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
-#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
-#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/internal/quantization_util.h"
+#include "tensorflow/lite/kernels/internal/reference/space_to_batch_nd.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
-#include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/memory_helpers.h"
 
 namespace tflite {
-namespace ops {
-namespace builtin {
-namespace space_to_batch_nd {
-
-// This file has two implementations of SpaceToBatchND.
-enum KernelType {
-  kReference,
-  kGenericOptimized,
-};
+namespace {
 
 struct SpaceToBatchNDContext {
   SpaceToBatchNDContext(TfLiteContext* context, TfLiteNode* node) {
@@ -57,6 +50,7 @@ const int kInputMaxDimensionNum = 4;
 TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
                                 SpaceToBatchNDContext* op_context) {
   TfLiteIntArray* input_size = op_context->input->dims;
+  TfLiteIntArray* output_size = op_context->output->dims;
   const int32* block_shape = GetTensorData<int32>(op_context->block_shape);
   const int32* paddings_data = GetTensorData<int32>(op_context->paddings);
 
@@ -71,8 +65,6 @@ TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
                     spatial_dims_num);
   TF_LITE_ENSURE_EQ(context, op_context->paddings->dims->data[1], 2);
 
-  TfLiteIntArray* output_size = TfLiteIntArrayCopy(input_size);
-
   // Ensures the input height and width (with padding) is a multiple of block
   // shape height and width.
   int output_batch_size = input_size->data[0];
@@ -80,15 +72,14 @@ TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
     int final_dim_size = (input_size->data[dim + 1] + paddings_data[dim * 2] +
                           paddings_data[dim * 2 + 1]);
     TF_LITE_ENSURE_EQ(context, final_dim_size % block_shape[dim], 0);
-    output_size->data[dim + 1] = final_dim_size / block_shape[dim];
     output_batch_size *= block_shape[dim];
   }
 
-  output_size->data[0] = output_batch_size;
-  output_size->data[input_size->size - 1] =
-      input_size->data[input_size->size - 1];
+  // Checks output dimensions.
+  TF_LITE_ENSURE_EQ(context, output_size->data[0], output_batch_size);
+  TF_LITE_ENSURE_EQ(context, output_size->data[input_size->size - 1], input_size->data[input_size->size - 1]);
 
-  return context->ResizeTensor(context, op_context->output, output_size);
+  return kTfLiteOk;
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
@@ -103,73 +94,41 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_TYPES_EQ(context, op_context.input->type,
                           op_context.output->type);
 
-  if (!IsConstantTensor(op_context.block_shape) ||
-      !IsConstantTensor(op_context.paddings)) {
-    SetTensorToDynamic(op_context.output);
-    return kTfLiteOk;
-  }
   return ResizeOutputTensor(context, &op_context);
 }
 
-template <KernelType kernel_type>
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   SpaceToBatchNDContext op_context(context, node);
 
-  // Resize the output tensor if the output tensor is dynamic.
-  if (IsDynamicTensor(op_context.output)) {
-    TF_LITE_ENSURE_OK(context, ResizeOutputTensor(context, &op_context));
-  }
+  tflite::SpaceToBatchParams op_params;
+  op_params.output_offset = 0;
 
-#define TF_LITE_SPACE_TO_BATCH_ND(type, scalar, pad_value)             \
-  tflite::SpaceToBatchParams op_params;                                \
-  op_params.output_offset = pad_value;                                 \
-  type::SpaceToBatchND(op_params, GetTensorShape(op_context.input),    \
-                       GetTensorData<scalar>(op_context.input),        \
-                       GetTensorShape(op_context.block_shape),         \
-                       GetTensorData<int32_t>(op_context.block_shape), \
-                       GetTensorShape(op_context.paddings),            \
-                       GetTensorData<int32_t>(op_context.paddings),    \
-                       GetTensorShape(op_context.output),              \
-                       GetTensorData<scalar>(op_context.output))
+  #define TF_LITE_SPACE_TO_BATCH_ND(scalar)             \
+    reference_ops::SpaceToBatchND(                      \
+       op_params, GetTensorShape(op_context.input),     \
+       GetTensorData<scalar>(op_context.input),         \
+       GetTensorShape(op_context.block_shape),          \
+       GetTensorData<int32_t>(op_context.block_shape),  \
+       GetTensorShape(op_context.paddings),             \
+       GetTensorData<int32_t>(op_context.paddings),     \
+       GetTensorShape(op_context.output),               \
+       GetTensorData<scalar>(op_context.output));
+
   switch (op_context.input->type) {  // Already know in/out types are same.
     case kTfLiteFloat32:
-      if (kernel_type == kReference) {
-        TF_LITE_SPACE_TO_BATCH_ND(reference_ops, float, 0);
-      } else {
-        TF_LITE_SPACE_TO_BATCH_ND(optimized_ops, float, 0);
-      }
+      TF_LITE_SPACE_TO_BATCH_ND(float);
       break;
     case kTfLiteUInt8:
-      if (kernel_type == kReference) {
-        TF_LITE_SPACE_TO_BATCH_ND(reference_ops, uint8_t,
-                                  op_context.output->params.zero_point);
-      } else {
-        TF_LITE_SPACE_TO_BATCH_ND(optimized_ops, uint8_t,
-                                  op_context.output->params.zero_point);
-      }
+      TF_LITE_SPACE_TO_BATCH_ND(uint8_t);
       break;
     case kTfLiteInt8:
-      if (kernel_type == kReference) {
-        TF_LITE_SPACE_TO_BATCH_ND(reference_ops, int8_t,
-                                  op_context.output->params.zero_point);
-      } else {
-        TF_LITE_SPACE_TO_BATCH_ND(optimized_ops, int8_t,
-                                  op_context.output->params.zero_point);
-      }
+      TF_LITE_SPACE_TO_BATCH_ND(int8_t);
       break;
     case kTfLiteInt32:
-      if (kernel_type == kReference) {
-        TF_LITE_SPACE_TO_BATCH_ND(reference_ops, int32_t, 0);
-      } else {
-        TF_LITE_SPACE_TO_BATCH_ND(optimized_ops, int32_t, 0);
-      }
+      TF_LITE_SPACE_TO_BATCH_ND(int32_t);
       break;
     case kTfLiteInt64:
-      if (kernel_type == kReference) {
-        TF_LITE_SPACE_TO_BATCH_ND(reference_ops, int64_t, 0);
-      } else {
-        TF_LITE_SPACE_TO_BATCH_ND(optimized_ops, int64_t, 0);
-      }
+      TF_LITE_SPACE_TO_BATCH_ND(int64_t);
       break;
     default:
       context->ReportError(
@@ -181,27 +140,17 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace space_to_batch_nd
+}  // namespace
 
-TfLiteRegistration* Register_SPACE_TO_BATCH_ND_REF() {
-  static TfLiteRegistration r = {
-      nullptr, nullptr, space_to_batch_nd::Prepare,
-      space_to_batch_nd::Eval<space_to_batch_nd::kReference>};
-  return &r;
+TfLiteRegistration Register_SPACE_TO_BATCH_ND() {
+  return {/*init=*/nullptr,
+		  /*free=*/nullptr,
+		  /*prepare=*/Prepare,
+		  /*invoke=*/Eval,
+		  /*profiling_string=*/nullptr,
+		  /*builtin_code=*/0,
+		  /*custom_name=*/nullptr,
+		  /*version=*/0};
 }
 
-TfLiteRegistration* Register_SPACE_TO_BATCH_ND_GENERIC_OPT() {
-  static TfLiteRegistration r = {
-      nullptr, nullptr, space_to_batch_nd::Prepare,
-      space_to_batch_nd::Eval<space_to_batch_nd::kGenericOptimized>};
-  return &r;
-}
-
-TfLiteRegistration* Register_SPACE_TO_BATCH_ND() {
-  // return Register_SPACE_TO_BATCH_ND_REF();
-  return Register_SPACE_TO_BATCH_ND_GENERIC_OPT();
-}
-
-}  // namespace builtin
-}  // namespace ops
 }  // namespace tflite
