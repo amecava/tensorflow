@@ -36,6 +36,7 @@ TfLiteRegistration Register_DEPTHWISE_CONV_2D();
 TfLiteRegistration Register_QUANTIZE();
 TfLiteRegistration Register_SHAPE();
 TfLiteRegistration Register_SOFTMAX();
+TfLiteRegistration Register_SPACE_TO_BATCH_ND();
 TfLiteRegistration Register_SQUEEZE();
 TfLiteRegistration Register_SVDF();
 TfLiteRegistration Register_TRANSPOSE_CONV_2D();
