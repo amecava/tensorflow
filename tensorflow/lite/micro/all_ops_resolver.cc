@@ -70,6 +70,7 @@ AllOpsResolver::AllOpsResolver() {
   AddShape();
   AddSin();
   AddSoftmax();
+  AddSpaceToBatchNd();
   AddSplit();
   AddSplitV();
   AddSqueeze();
