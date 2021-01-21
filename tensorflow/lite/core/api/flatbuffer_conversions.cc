@@ -1436,12 +1436,23 @@ TfLiteStatus ParseNotEqual(const Operator*, ErrorReporter*,
 TfLiteStatus ParseOneHot(const Operator*, ErrorReporter*,
                          BuiltinDataAllocator*, void**) {
   CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
+  SafeBuiltinDataAllocator safe_allocator(allocator);
 
-  auto params = safe_allocator.Allocate<TfLiteOneHotParams>();
+  std::unique_ptr<TfLiteOneHotParams,
+                  SafeBuiltinDataAllocator::BuiltinDataDeleter>
+      params = safe_allocator.Allocate<TfLiteOneHotParams>();
   TF_LITE_ENSURE(error_reporter, params != nullptr);
-  if (const auto* schema_params = op->builtin_options_as_OneHotOptions()) {
+
+  const OneHotOptions* schema_params = op->builtin_options_as_OneHotOptions();
+
+  if (schema_params != nullptr) {
     params->axis = schema_params->axis();
+  } else {
+    // TODO(b/157480169): We should either return kTfLiteError or fill in some
+    // reasonable defaults in the params struct. We are not doing so until we
+    // better undertand the ramifications of changing the legacy behavior.
   }
+  
   *builtin_data = params.release();
   return kTfLiteOk;
 }
