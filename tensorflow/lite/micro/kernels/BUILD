@@ -139,6 +139,7 @@ cc_library(
         "sub.cc",
         "svdf_common.cc",
         "tanh.cc",
+        "transpose.cc",
         "transpose_conv.cc",
         "unpack.cc",
     ] + select({
