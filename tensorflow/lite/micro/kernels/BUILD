@@ -121,6 +121,7 @@ cc_library(
         "maximum_minimum.cc",
         "mul.cc",
         "neg.cc",
+        "one_hot.cc",
         "pack.cc",
         "pad.cc",
         "pooling.cc",
