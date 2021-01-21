@@ -301,7 +301,7 @@ class MicroMutableOpResolver : public MicroOpResolver {
   }
 
   TfLiteStatus AddOneHot() {
-    return AddBuiltin(BuiltinOperator_ONE_HOT, tflite::ops::micro::Register_ONE_HOT(),
+    return AddBuiltin(BuiltinOperator_ONE_HOT, Register_ONE_HOT(),
                       ParseOneHot);
   }
 
