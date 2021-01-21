@@ -75,6 +75,7 @@ TfLiteRegistration Register_MINIMUM();
 TfLiteRegistration Register_MUL();
 TfLiteRegistration Register_NEG();
 TfLiteRegistration Register_NOT_EQUAL();
+TfLiteRegistration Register_ONE_HOT();
 TfLiteRegistration Register_PACK();
 TfLiteRegistration Register_PAD();
 TfLiteRegistration Register_PADV2();
