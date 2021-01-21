@@ -1434,7 +1434,7 @@ TfLiteStatus ParseNotEqual(const Operator*, ErrorReporter*,
 }
 
 TfLiteStatus ParseOneHot(const Operator*, ErrorReporter*,
-                         BuiltinDataAllocator*, void**) {
+                         BuiltinDataAllocator*, void** builtin_data) {
   CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
   SafeBuiltinDataAllocator safe_allocator(allocator);
 
@@ -1452,7 +1452,7 @@ TfLiteStatus ParseOneHot(const Operator*, ErrorReporter*,
     // reasonable defaults in the params struct. We are not doing so until we
     // better undertand the ramifications of changing the legacy behavior.
   }
-  
+
   *builtin_data = params.release();
   return kTfLiteOk;
 }
