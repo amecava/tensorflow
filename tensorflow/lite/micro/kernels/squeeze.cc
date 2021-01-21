@@ -96,7 +96,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
 
 }  // namespace
 
-TfLiteRegistration* Register_SQUEEZE() {
+TfLiteRegistration Register_SQUEEZE() {
   return {/*init=*/nullptr,
           /*free=*/nullptr,
           /*prepare=*/Prepare,
