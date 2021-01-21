@@ -55,6 +55,7 @@ AllOpsResolver::AllOpsResolver() {
   AddMul();
   AddNeg();
   AddNotEqual();
+  AddOneHot();
   AddPack();
   AddPad();
   AddPadV2();
