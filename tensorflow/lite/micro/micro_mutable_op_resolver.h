@@ -300,6 +300,11 @@ class MicroMutableOpResolver : public MicroOpResolver {
                       tflite::ops::micro::Register_NOT_EQUAL(), ParseNotEqual);
   }
 
+  TfLiteStatus AddOneHot() {
+    return AddBuiltin(BuiltinOperator_ONE_HOT, Register_ONE_HOT(),
+                      ParseOneHot);
+  }
+
   TfLiteStatus AddPack() {
     return AddBuiltin(BuiltinOperator_PACK, tflite::ops::micro::Register_PACK(),
                       ParsePack);
