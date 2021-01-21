@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,16 +16,13 @@ limitations under the License.
 
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/kernels/internal/compatibility.h"
-#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
-#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/internal/reference/space_to_batch_nd.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
 
 namespace tflite {
-namespace ops {
-namespace builtin {
-namespace space_to_batch_nd {
+namespace {
 
 struct SpaceToBatchNDContext {
   SpaceToBatchNDContext(TfLiteContext* context, TfLiteNode* node) {
@@ -111,7 +108,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   op_params.output_offset = 0;
 
   #define TF_LITE_SPACE_TO_BATCH_ND(scalar)           \
-    reference_ops::SpaceToBatchND(                    \
+	reference_ops::SpaceToBatchND(                    \
       op_params, GetTensorShape(op_context.input),    \
       GetTensorData<scalar>(op_context.input),        \
       GetTensorShape(op_context.block_shape),         \
@@ -148,7 +145,7 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace space_to_batch_nd
+}  // namespace
 
 TfLiteRegistration Register_SPACE_TO_BATCH_ND() {
   return {/*init=*/nullptr,
@@ -161,6 +158,4 @@ TfLiteRegistration Register_SPACE_TO_BATCH_ND() {
           /*version=*/0};
 }
 
-}  // namespace builtin
-}  // namespace ops
 }  // namespace tflite
