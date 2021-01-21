@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,14 +16,16 @@ limitations under the License.
 
 #include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/internal/quantization_util.h"
+#include "tensorflow/lite/kernels/internal/reference/process_broadcast_shapes.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/memory_helpers.h"
 
 namespace tflite {
-namespace ops {
-namespace builtin {
-namespace one_hot {
+namespace {
 
 constexpr int kIndicesTensor = 0;
 constexpr int kDepthTensor = 1;
@@ -106,17 +108,19 @@ void OneHotCompute(const OneHotContext& op_context) {
 TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
                                 const OneHotContext& op_context) {
   TF_LITE_ENSURE(context, *op_context.depth->data.i32 >= 0);
-  TfLiteIntArray* output_size = TfLiteIntArrayCreate(op_context.output_dims);
+
+  // Checks output dimensions.
   for (int i = 0; i < op_context.output_dims; ++i) {
     if (i < op_context.axis) {
-      output_size->data[i] = op_context.indices->dims->data[i];
+      TF_LITE_ENSURE_EQ(context, op_context.output->dims->data[i], op_context.indices->dims->data[i]);
     } else if (i == op_context.axis) {
-      output_size->data[i] = *op_context.depth->data.i32;
+      TF_LITE_ENSURE_EQ(context, op_context.output->dims->data[i], *op_context.depth->data.i32);
     } else {
-      output_size->data[i] = op_context.indices->dims->data[i - 1];
+      TF_LITE_ENSURE_EQ(context, op_context.output->dims->data[i], op_context.indices->dims->data[i - 1]);
     }
   }
-  return context->ResizeTensor(context, op_context.output, output_size);
+
+  return kTfLiteOk;
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
@@ -152,20 +156,11 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_TYPES_EQ(context, op_context.off_value->type,
                           op_context.dtype);
 
-  if (!IsConstantTensor(op_context.depth)) {
-    SetTensorToDynamic(op_context.output);
-    return kTfLiteOk;
-  }
-
   return ResizeOutputTensor(context, op_context);
 }
 
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   OneHotContext op_context{context, node};
-
-  if (IsDynamicTensor(op_context.output)) {
-    ResizeOutputTensor(context, op_context);
-  }
 
   switch (op_context.output->type) {
     case kTfLiteFloat32:
@@ -193,18 +188,17 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace one_hot
+}  // namespace
 
-TfLiteRegistration* Register_ONE_HOT() {
-  static TfLiteRegistration r = {
-      nullptr,
-      nullptr,
-      one_hot::Prepare,
-      one_hot::Eval,
-  };
-  return &r;
+TfLiteRegistration Register_ONE_HOT() {
+  return {/*init=*/nullptr,
+	      /*free=*/nullptr,
+	      /*prepare=*/Prepare,
+	      /*invoke=*/Eval,
+	      /*profiling_string=*/nullptr,
+	      /*builtin_code=*/0,
+	      /*custom_name=*/nullptr,
+	      /*version=*/0};
 }
 
-}  // namespace builtin
-}  // namespace ops
 }  // namespace tflite
