@@ -1,4 +1,4 @@
-/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,25 +14,18 @@ limitations under the License.
 ==============================================================================*/
 #include <stdint.h>
 
+#include "tensorflow/lite/c/builtin_op_data.h"
 #include "tensorflow/lite/c/common.h"
-#include "tensorflow/lite/kernels/internal/compatibility.h"
-#include "tensorflow/lite/kernels/internal/optimized/optimized_ops.h"
-#include "tensorflow/lite/kernels/internal/reference/reference_ops.h"
-#include "tensorflow/lite/kernels/internal/tensor.h"
+#include "tensorflow/lite/kernels/internal/quantization_util.h"
+#include "tensorflow/lite/kernels/internal/reference/transpose.h"
 #include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
-#include "tensorflow/lite/kernels/internal/types.h"
 #include "tensorflow/lite/kernels/kernel_util.h"
+#include "tensorflow/lite/kernels/op_macros.h"
+#include "tensorflow/lite/micro/kernels/kernel_util.h"
+#include "tensorflow/lite/micro/memory_helpers.h"
 
 namespace tflite {
-namespace ops {
-namespace builtin {
-namespace transpose {
-
-// This file has two implementations of Transpose.
-enum KernelType {
-  kReference,
-  kGenericOptimized,
-};
+namespace {
 
 struct TransposeContext {
   TransposeContext(TfLiteContext* context, TfLiteNode* node) {
@@ -48,7 +41,7 @@ struct TransposeContext {
 TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
                                 TransposeContext* op_context) {
   int dims = NumDimensions(op_context->input);
-  const int* perm_data = GetTensorData<int32_t>(op_context->perm);
+  const int32* perm_data = GetTensorData<int32_t>(op_context->perm);
 
   // Ensure validity of the permutations tensor as a 1D tensor.
   TF_LITE_ENSURE_EQ(context, NumDimensions(op_context->perm), 1);
@@ -58,14 +51,14 @@ TfLiteStatus ResizeOutputTensor(TfLiteContext* context,
                        "Transpose op permutations array is out of bounds.");
   }
 
-  // Determine size of output tensor.
+  // Checks output dimensions.
   TfLiteIntArray* input_size = op_context->input->dims;
-  TfLiteIntArray* output_size = TfLiteIntArrayCopy(input_size);
+  TfLiteIntArray* output_size = op_context->output->dims;
   for (int idx = 0; idx < dims; ++idx) {
-    output_size->data[idx] = input_size->data[perm_data[idx]];
+	TF_LITE_ENSURE_EQ(context, output_size->data[idx], input_size->data[perm_data[idx]]);
   }
 
-  return context->ResizeTensor(context, op_context->output, output_size);
+  return kTfLiteOk;
 }
 
 TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
@@ -80,35 +73,27 @@ TfLiteStatus Prepare(TfLiteContext* context, TfLiteNode* node) {
   TF_LITE_ENSURE_TYPES_EQ(context, op_context.input->type,
                           op_context.output->type);
 
-  if (!IsConstantTensor(op_context.perm)) {
-    SetTensorToDynamic(op_context.output);
-    return kTfLiteOk;
-  }
   return ResizeOutputTensor(context, &op_context);
 }
 
-template <KernelType kernel_type>
 TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   TransposeContext op_context(context, node);
 
-  // Resize the output tensor if the output tensor is dynamic.
-  if (IsDynamicTensor(op_context.output)) {
-    TF_LITE_ENSURE_OK(context, ResizeOutputTensor(context, &op_context));
-  }
-
-  const int* perm_data = GetTensorData<int32_t>(op_context.perm);
+  const int32* perm_data = GetTensorData<int32_t>(op_context.perm);
   const int size = op_context.perm->dims->data[0];
+
   TransposeParams params;
   params.perm_count = size;
   for (int i = 0; i < size; ++i) {
     params.perm[i] = perm_data[i];
   }
 
-#define TF_LITE_TRANSPOSE(type, scalar)                     \
-  type::Transpose(params, GetTensorShape(op_context.input), \
-                  GetTensorData<scalar>(op_context.input),  \
-                  GetTensorShape(op_context.output),        \
-                  GetTensorData<scalar>(op_context.output))
+  #define TF_LITE_TRANSPOSE(scalar)                    \
+    reference_ops::Transpose(						   \
+       params, GetTensorShape(op_context.input),       \
+       GetTensorData<scalar>(op_context.input),        \
+       GetTensorShape(op_context.output),              \
+       GetTensorData<scalar>(op_context.output));
 
   // Transpose kernel only does rearranging values not numeric evaluations on
   // each cell. It's safe to implement per size of scalar type and this trick
@@ -116,35 +101,23 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   switch (op_context.input->type) {
     case kTfLiteFloat32:
     case kTfLiteInt32:
-      if (kernel_type == kGenericOptimized) {
-        TF_LITE_TRANSPOSE(optimized_ops, int32_t);
-      } else {
-        TF_LITE_TRANSPOSE(reference_ops, int32_t);
-      }
+      TF_LITE_TRANSPOSE(int32_t);
       break;
     case kTfLiteUInt8:
     case kTfLiteInt8:
-      if (kernel_type == kGenericOptimized) {
-        TF_LITE_TRANSPOSE(optimized_ops, int8_t);
-      } else {
-        TF_LITE_TRANSPOSE(reference_ops, int8_t);
-      }
+      TF_LITE_TRANSPOSE(int8_t);
       break;
     case kTfLiteInt16:
-      TF_LITE_TRANSPOSE(reference_ops, int16_t);
+      TF_LITE_TRANSPOSE(int16_t);
       break;
     case kTfLiteInt64:
-      TF_LITE_TRANSPOSE(reference_ops, int64_t);
+      TF_LITE_TRANSPOSE(int64_t);
       break;
     case kTfLiteBool:
       if (sizeof(bool) == 1) {
-        if (kernel_type == kGenericOptimized) {
-          TF_LITE_TRANSPOSE(optimized_ops, int8_t);
-        } else {
-          TF_LITE_TRANSPOSE(reference_ops, int8_t);
-        }
+    	TF_LITE_TRANSPOSE(int8_t);
       } else {
-        TF_LITE_TRANSPOSE(reference_ops, bool);
+        TF_LITE_TRANSPOSE(bool);
       }
       break;
     default:
@@ -158,24 +131,17 @@ TfLiteStatus Eval(TfLiteContext* context, TfLiteNode* node) {
   return kTfLiteOk;
 }
 
-}  // namespace transpose
+}  // namespace
 
-TfLiteRegistration* Register_TRANSPOSE_REF() {
-  static TfLiteRegistration r = {nullptr, nullptr, transpose::Prepare,
-                                 transpose::Eval<transpose::kReference>};
-  return &r;
+TfLiteRegistration Register_TRANSPOSE() {
+  return {/*init=*/nullptr,
+		  /*free=*/nullptr,
+		  /*prepare=*/Prepare,
+		  /*invoke=*/Eval,
+		  /*profiling_string=*/nullptr,
+		  /*builtin_code=*/0,
+		  /*custom_name=*/nullptr,
+		  /*version=*/0};
 }
 
-TfLiteRegistration* Register_TRANSPOSE_GENERIC_OPTIMIZED() {
-  static TfLiteRegistration r = {nullptr, nullptr, transpose::Prepare,
-                                 transpose::Eval<transpose::kGenericOptimized>};
-  return &r;
-}
-
-TfLiteRegistration* Register_TRANSPOSE() {
-  return Register_TRANSPOSE_GENERIC_OPTIMIZED();
-}
-
-}  // namespace builtin
-}  // namespace ops
 }  // namespace tflite
