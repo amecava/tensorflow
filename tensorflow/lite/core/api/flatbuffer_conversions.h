@@ -213,6 +213,9 @@ TfLiteStatus ParseNotEqual(const Operator* op, ErrorReporter* error_reporter,
                            BuiltinDataAllocator* allocator,
                            void** builtin_data);
 
+TfLiteStatus ParseOneHot(const Operator* op, ErrorReporter* error_reporter,
+                         BuiltinDataAllocator* allocator, void** builtin_data);
+
 TfLiteStatus ParsePack(const Operator* op, ErrorReporter* error_reporter,
                        BuiltinDataAllocator* allocator, void** builtin_data);
 

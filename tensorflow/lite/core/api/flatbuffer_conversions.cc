@@ -321,6 +321,10 @@ TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
       return ParseNotEqual(op, error_reporter, allocator, builtin_data);
     }
 
+    case BuiltinOperator_ONE_HOT: {
+      return ParseOneHot(op, error_reporter, allocator, builtin_data);
+    }
+
     case BuiltinOperator_PACK: {
       return ParsePack(op, error_reporter, allocator, builtin_data);
     }
@@ -657,15 +661,6 @@ TfLiteStatus ParseOpDataTfLite(const Operator* op, BuiltinOperator op_type,
         params->max = schema_params->max();
         params->num_bits = schema_params->num_bits();
         params->narrow_range = schema_params->narrow_range();
-      }
-      *builtin_data = params.release();
-      return kTfLiteOk;
-    }
-    case BuiltinOperator_ONE_HOT: {
-      auto params = safe_allocator.Allocate<TfLiteOneHotParams>();
-      TF_LITE_ENSURE(error_reporter, params != nullptr);
-      if (const auto* schema_params = op->builtin_options_as_OneHotOptions()) {
-        params->axis = schema_params->axis();
       }
       *builtin_data = params.release();
       return kTfLiteOk;
@@ -1435,6 +1430,19 @@ TfLiteStatus ParseNeg(const Operator*, ErrorReporter*, BuiltinDataAllocator*,
 // selective registration for the OpResolver implementation in micro.
 TfLiteStatus ParseNotEqual(const Operator*, ErrorReporter*,
                            BuiltinDataAllocator*, void**) {
+  return kTfLiteOk;
+}
+
+TfLiteStatus ParseOneHot(const Operator*, ErrorReporter*,
+                         BuiltinDataAllocator*, void**) {
+  CheckParsePointerParams(op, error_reporter, allocator, builtin_data);
+
+  auto params = safe_allocator.Allocate<TfLiteOneHotParams>();
+  TF_LITE_ENSURE(error_reporter, params != nullptr);
+  if (const auto* schema_params = op->builtin_options_as_OneHotOptions()) {
+    params->axis = schema_params->axis();
+  }
+  *builtin_data = params.release();
   return kTfLiteOk;
 }
 
