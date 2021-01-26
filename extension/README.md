@@ -18,7 +18,7 @@ The following instructions will help you build the sample for the STM32F7 using 
 Navigate into the tensorflow directory and run the Makefile in the TensorFlow Lite for Microcontrollers directory:
 
 ```
-make -f tensorflow/lite/micro/tools/make/Makefile TARGET=stm32f4 TAGS=”CMSIS” generate_projects
+make -f tensorflow/lite/micro/tools/make/Makefile TARGET=stm32f4 TAGS=”CMSIS” generate_projects 
 ```
 
 This will take a few minutes, so be patient. It generates a number of example projects and source code for you to use as a starting point.
