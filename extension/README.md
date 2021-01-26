@@ -52,7 +52,7 @@ rm -r <project_directory>/TFLM/tensorflow/lite/micro/examples
 
 Even though the source files are in our project, we still need to tell the IDE to include them in the build process. Go to Project > Properties. In that window, go to C/C++ General > Paths and Symbols > Includes tab > GNU C. Click Add. In the pop-up, click Workspace. Select the TFLM directory in your project. Check Add to all configurations and Add to all languages.
 
-Repeat this process to add the following directories in TFLM/third_party:
+Repeat this process to add the following directories from TFLM/third_party to the build:
 
 ```
 flatbuffers/include
