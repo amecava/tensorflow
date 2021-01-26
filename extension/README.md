@@ -13,8 +13,7 @@ TensorFlow Lite for Microcontrollers is an experimental port of TensorFlow Lite 
 
 ## Deploy to Microcontroller
 
-The following instructions will help you build the sample for the STM32F7 using
-using STM32CubeIDE.
+The following instructions will help you build the sample for the STM32F7 using STM32CubeIDE.
 
 Navigate into the tensorflow directory and run the Makefile in the TensorFlow Lite for Microcontrollers directory:
 
